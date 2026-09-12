@@ -1,24 +1,32 @@
 import { useAction, useMutation, useQuery } from "convex/react";
 import { useEffect, useRef, useState, type FormEvent } from "react";
-import { Link } from "react-router-dom";
+import { Link, useParams } from "react-router-dom";
 import { api } from "../../convex/_generated/api";
 import type { Id } from "../../convex/_generated/dataModel";
 import { writeSessionId } from "../lib/ids";
 import { getSpeechRecognition, speak, stopSpeaking } from "../lib/speech";
 
 export function Roleplay({
-  leadId,
   sessionId,
   onSessionId,
 }: {
-  leadId: Id<"leadQualifications"> | null;
-  sessionId: Id<"roleplaySessions"> | null;
-  onSessionId: (id: Id<"roleplaySessions">) => void;
+  sessionId: Id<"rehearsals"> | null;
+  onSessionId: (id: Id<"rehearsals">) => void;
 }) {
-  const lead = useQuery(api.leads.get, leadId ? { leadId } : "skip");
+  const { leadId } = useParams();
+  const typedLeadId = leadId as Id<"leads"> | undefined;
+  const lead = useQuery(
+    api.leads.get,
+    typedLeadId ? { leadId: typedLeadId } : "skip",
+  );
+  const latest = useQuery(
+    api.roleplay.latestForLead,
+    typedLeadId ? { leadId: typedLeadId } : "skip",
+  );
+  const activeId = sessionId ?? latest?._id ?? null;
   const session = useQuery(
     api.roleplay.get,
-    sessionId ? { sessionId } : "skip",
+    activeId ? { sessionId: activeId } : "skip",
   );
   const start = useAction(api.roleplayActions.start);
   const sendTurn = useAction(api.roleplayActions.sendTurn);
@@ -43,24 +51,24 @@ export function Roleplay({
     return () => stopSpeaking();
   }, []);
 
-  if (!leadId || lead?.status !== "ready") {
+  if (!typedLeadId || lead?.status !== "ready") {
     return (
       <section className="page">
         <h1>Roleplay</h1>
-        <p className="lede">Qualify a lead first so we know who you are walking into.</p>
-        <Link to="/qualify" className="text-link">
-          Qualify a lead
+        <p className="lede">Prepare a lead first.</p>
+        <Link to="/leads" className="text-link">
+          Back to leads
         </Link>
       </section>
     );
   }
 
   async function begin() {
-    if (!leadId) return;
+    if (!typedLeadId) return;
     setError(null);
     setBusy(true);
     try {
-      const id = await start({ leadQualificationId: leadId });
+      const id = await start({ leadId: typedLeadId });
       writeSessionId(id);
       onSessionId(id);
     } catch (err) {
@@ -71,12 +79,12 @@ export function Roleplay({
   }
 
   async function send(text: string) {
-    if (!sessionId || !text.trim()) return;
+    if (!activeId || !text.trim()) return;
     setError(null);
     setBusy(true);
     setDraft("");
     try {
-      const reply = await sendTurn({ sessionId, text });
+      const reply = await sendTurn({ sessionId: activeId, text });
       speak(reply);
     } catch (err) {
       setError(err instanceof Error ? err.message : "Turn failed");
@@ -121,19 +129,22 @@ export function Roleplay({
     await send(draft);
   }
 
+  const counterpart =
+    lead.leadType === "partner" ? `Partner at ${lead.name}` : `Buyer at ${lead.name}`;
+
   return (
     <section className="page roleplay">
-      <p className="kicker">Buyer at {lead.leadName}</p>
-      <h1>Rehearse the call out loud</h1>
+      <p className="kicker">{counterpart}</p>
+      <h1>Rehearse the conversation</h1>
 
       {!session ? (
         <div className="start-panel">
           <p className="lede">
-            We&apos;ll build a persona from the lead brief, then play that buyer.
-            Your mic uses the browser — no extra voice API required.
+            We&apos;ll cast a counterpart from the lead brief. Mic uses the
+            browser — type if speech isn&apos;t available.
           </p>
           <button type="button" onClick={() => void begin()} disabled={busy}>
-            {busy ? "Casting the buyer…" : "Start roleplay"}
+            {busy ? "Casting…" : "Start roleplay"}
           </button>
           {error ? <p className="error">{error}</p> : null}
         </div>
@@ -143,23 +154,18 @@ export function Roleplay({
             <h2>Persona brief</h2>
             <p>{session.personaBrief}</p>
           </aside>
-
           <div className="transcript" ref={scroller}>
             {session.transcript.length === 0 ? (
               <p className="empty">Hit the mic or type your opener.</p>
             ) : (
               session.transcript.map((turn, index) => (
-                <article
-                  key={`${turn.at}-${index}`}
-                  className={`bubble ${turn.role}`}
-                >
-                  <span>{turn.role === "rep" ? "You" : lead.leadName}</span>
+                <article key={`${turn.at}-${index}`} className={`bubble ${turn.role}`}>
+                  <span>{turn.role === "rep" ? "You" : lead.name}</span>
                   <p>{turn.text}</p>
                 </article>
               ))
             )}
           </div>
-
           <form onSubmit={onSubmit} className="composer voice">
             <button
               type="button"

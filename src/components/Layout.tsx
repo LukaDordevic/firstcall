@@ -2,10 +2,9 @@ import { NavLink } from "react-router-dom";
 import type { ReactNode } from "react";
 
 const links = [
-  { to: "/", label: "Brain" },
-  { to: "/learn", label: "Explore" },
-  { to: "/qualify", label: "Qualify" },
-  { to: "/roleplay", label: "Roleplay" },
+  { to: "/", label: "Setup" },
+  { to: "/strategy", label: "Strategy" },
+  { to: "/leads", label: "Leads" },
 ];
 
 export function Layout({
@@ -19,8 +18,8 @@ export function Layout({
     <div className="app-shell">
       <header className="topbar">
         <NavLink to="/" className="wordmark">
-          <span className="mark">FC</span>
-          FirstCall
+          <span className="mark">BH</span>
+          Beachhead
         </NavLink>
         <nav>
           {links.map((link) => (
@@ -34,7 +33,7 @@ export function Layout({
             </NavLink>
           ))}
         </nav>
-        <p className="company-chip">{companyName ?? "No company loaded"}</p>
+        <p className="company-chip">{companyName ?? "No GTM brain yet"}</p>
       </header>
       <main>{children}</main>
     </div>

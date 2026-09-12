@@ -1,21 +1,21 @@
 import { v } from "convex/values";
 import { mutation, query } from "./_generated/server";
-import { roleplayValidator, transcriptTurnValidator } from "./validators";
+import { rehearsalValidator, transcriptTurnValidator } from "./validators";
 
 export const create = mutation({
   args: {
-    leadQualificationId: v.id("leadQualifications"),
+    leadId: v.id("leads"),
     personaBrief: v.string(),
   },
-  returns: v.id("roleplaySessions"),
+  returns: v.id("rehearsals"),
   handler: async (ctx, args) => {
-    const lead = await ctx.db.get(args.leadQualificationId);
+    const lead = await ctx.db.get(args.leadId);
     if (!lead) throw new Error("Lead not found");
     if (lead.status !== "ready") {
-      throw new Error("Qualify the lead before roleplay");
+      throw new Error("Prepare the lead before roleplay");
     }
-    return await ctx.db.insert("roleplaySessions", {
-      leadQualificationId: args.leadQualificationId,
+    return await ctx.db.insert("rehearsals", {
+      leadId: args.leadId,
       personaBrief: args.personaBrief,
       transcript: [],
       status: "active",
@@ -25,22 +25,20 @@ export const create = mutation({
 });
 
 export const get = query({
-  args: { sessionId: v.id("roleplaySessions") },
-  returns: v.union(roleplayValidator, v.null()),
+  args: { sessionId: v.id("rehearsals") },
+  returns: v.union(rehearsalValidator, v.null()),
   handler: async (ctx, args) => {
     return await ctx.db.get(args.sessionId);
   },
 });
 
 export const latestForLead = query({
-  args: { leadQualificationId: v.id("leadQualifications") },
-  returns: v.union(roleplayValidator, v.null()),
+  args: { leadId: v.id("leads") },
+  returns: v.union(rehearsalValidator, v.null()),
   handler: async (ctx, args) => {
     return await ctx.db
-      .query("roleplaySessions")
-      .withIndex("by_lead", (q) =>
-        q.eq("leadQualificationId", args.leadQualificationId),
-      )
+      .query("rehearsals")
+      .withIndex("by_lead", (q) => q.eq("leadId", args.leadId))
       .order("desc")
       .first();
   },
@@ -48,7 +46,7 @@ export const latestForLead = query({
 
 export const appendTurns = mutation({
   args: {
-    sessionId: v.id("roleplaySessions"),
+    sessionId: v.id("rehearsals"),
     turns: v.array(transcriptTurnValidator),
   },
   returns: v.null(),
@@ -66,7 +64,7 @@ export const appendTurns = mutation({
 });
 
 export const end = mutation({
-  args: { sessionId: v.id("roleplaySessions") },
+  args: { sessionId: v.id("rehearsals") },
   returns: v.null(),
   handler: async (ctx, args) => {
     const session = await ctx.db.get(args.sessionId);

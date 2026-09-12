@@ -1,4 +1,4 @@
-import { clip } from "./parse";
+import { clip, extractJson } from "./parse";
 
 const FIRECRAWL_BASE = "https://api.firecrawl.dev";
 const EXA_BASE = "https://api.exa.ai";
@@ -186,7 +186,10 @@ type ExaResult = {
   publishedDate?: string;
 };
 
-export async function exaSearch(query: string): Promise<string[]> {
+export async function exaSearchDetailed(
+  query: string,
+  numResults = 8,
+): Promise<Array<{ title: string; url: string; text: string }>> {
   const key = requireEnv("EXA_API_KEY");
   const response = await fetch(`${EXA_BASE}/search`, {
     method: "POST",
@@ -197,20 +200,25 @@ export async function exaSearch(query: string): Promise<string[]> {
     body: JSON.stringify({
       query,
       type: "auto",
-      numResults: 6,
+      numResults,
       contents: { text: true },
     }),
   });
   const payload = (await readJson(response, "Exa search")) as {
     results?: ExaResult[];
   };
-  return (payload.results ?? []).map((result) => {
-    const title = result.title ?? "Untitled";
-    const url = result.url ?? "";
-    const date = result.publishedDate ? ` (${result.publishedDate})` : "";
-    const text = clip(result.text ?? "", 500);
-    return `${title}${date}${url ? ` — ${url}` : ""}\n${text}`;
-  });
+  return (payload.results ?? [])
+    .map((result) => ({
+      title: result.title ?? "Untitled",
+      url: result.url ?? "",
+      text: clip(result.text ?? "", 700),
+    }))
+    .filter((result) => result.url.length > 0);
+}
+
+export async function exaSearch(query: string): Promise<string[]> {
+  const results = await exaSearchDetailed(query, 6);
+  return results.map((result) => `${result.title} — ${result.url}\n${result.text}`);
 }
 
 export async function grokChat(args: {
@@ -237,4 +245,21 @@ export async function grokChat(args: {
     throw new Error("x.ai returned an empty completion");
   }
   return text;
+}
+
+export async function grokJson<T>(args: {
+  system: string;
+  user: string;
+  temperature?: number;
+}): Promise<T> {
+  let lastError = "Model did not return JSON";
+  for (let attempt = 0; attempt < 2; attempt += 1) {
+    try {
+      const raw = await grokChat(args);
+      return extractJson<T>(raw);
+    } catch (error) {
+      lastError = error instanceof Error ? error.message : lastError;
+    }
+  }
+  throw new Error(lastError);
 }

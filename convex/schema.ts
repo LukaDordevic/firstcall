@@ -2,74 +2,80 @@ import { defineSchema, defineTable } from "convex/server";
 import { v } from "convex/values";
 
 export default defineSchema({
-  companyBrain: defineTable({
+  gtmProfile: defineTable({
     companyUrl: v.string(),
     companyName: v.string(),
     status: v.union(
-      v.literal("crawling"),
-      v.literal("synthesizing"),
+      v.literal("building"),
       v.literal("ready"),
       v.literal("error"),
     ),
     overview: v.optional(v.string()),
-    solutions: v.optional(
+    offering: v.optional(
       v.array(
         v.object({
           name: v.string(),
           description: v.string(),
-          icp: v.string(),
-          pricingModel: v.optional(v.string()),
           differentiators: v.array(v.string()),
-          commonObjections: v.array(
-            v.object({
-              objection: v.string(),
-              response: v.string(),
-            }),
-          ),
         }),
       ),
     ),
-    caseStudies: v.optional(
-      v.array(
-        v.object({
-          title: v.string(),
-          summary: v.string(),
-        }),
-      ),
-    ),
-    sourceChunks: v.optional(
-      v.array(
-        v.object({
-          url: v.string(),
-          text: v.string(),
-        }),
-      ),
-    ),
+    uploadedDocText: v.optional(v.string()),
     errorMessage: v.optional(v.string()),
     createdAt: v.number(),
   }).index("by_createdAt", ["createdAt"]),
 
-  leadQualifications: defineTable({
-    companyBrainId: v.id("companyBrain"),
-    leadUrl: v.string(),
-    leadName: v.string(),
+  industries: defineTable({
+    gtmProfileId: v.id("gtmProfile"),
+    name: v.string(),
+    reasoning: v.string(),
+    qualifyingQuestions: v.array(v.string()),
+    gtmStrategy: v.string(),
+    createdAt: v.number(),
+  }).index("by_profile", ["gtmProfileId"]),
+
+  partnerCategories: defineTable({
+    gtmProfileId: v.id("gtmProfile"),
+    name: v.string(),
+    reasoning: v.string(),
+    approachStrategy: v.string(),
+    proposalAngle: v.string(),
+    createdAt: v.number(),
+  }).index("by_profile", ["gtmProfileId"]),
+
+  leads: defineTable({
+    gtmProfileId: v.id("gtmProfile"),
+    leadType: v.union(v.literal("customer"), v.literal("partner")),
+    industryId: v.optional(v.id("industries")),
+    partnerCategoryId: v.optional(v.id("partnerCategories")),
+    name: v.string(),
+    url: v.string(),
+    oneLiner: v.string(),
     status: v.union(
+      v.literal("new"),
       v.literal("researching"),
       v.literal("ready"),
       v.literal("error"),
     ),
-    signals: v.optional(v.array(v.string())),
-    recommendedSolutions: v.optional(v.array(v.string())),
-    qualifyingQuestions: v.optional(v.array(v.string())),
-    reasoning: v.optional(v.string()),
     errorMessage: v.optional(v.string()),
     createdAt: v.number(),
   })
-    .index("by_brain", ["companyBrainId"])
-    .index("by_brain_and_created", ["companyBrainId", "createdAt"]),
+    .index("by_profile", ["gtmProfileId"])
+    .index("by_profile_and_type", ["gtmProfileId", "leadType"])
+    .index("by_industry", ["industryId"])
+    .index("by_partner_category", ["partnerCategoryId"]),
 
-  roleplaySessions: defineTable({
-    leadQualificationId: v.id("leadQualifications"),
+  leadPrep: defineTable({
+    leadId: v.id("leads"),
+    signals: v.array(v.string()),
+    recommendedApproach: v.string(),
+    qualifyingQuestions: v.array(v.string()),
+    reasoning: v.string(),
+    createdAt: v.number(),
+  }).index("by_lead", ["leadId"]),
+
+  rehearsals: defineTable({
+    leadId: v.id("leads"),
     personaBrief: v.optional(v.string()),
     transcript: v.array(
       v.object({
@@ -80,17 +86,5 @@ export default defineSchema({
     ),
     status: v.union(v.literal("active"), v.literal("ended")),
     createdAt: v.number(),
-  }).index("by_lead", ["leadQualificationId"]),
-
-  learnChats: defineTable({
-    companyBrainId: v.id("companyBrain"),
-    messages: v.array(
-      v.object({
-        role: v.union(v.literal("rep"), v.literal("agent")),
-        text: v.string(),
-        citedSource: v.optional(v.string()),
-      }),
-    ),
-    createdAt: v.number(),
-  }).index("by_brain", ["companyBrainId"]),
+  }).index("by_lead", ["leadId"]),
 });

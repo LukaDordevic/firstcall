@@ -8,12 +8,10 @@
  * @module
  */
 
-import type * as companyBrain from "../companyBrain.js";
-import type * as companyBrainActions from "../companyBrainActions.js";
+import type * as gtm from "../gtm.js";
+import type * as gtmActions from "../gtmActions.js";
 import type * as leads from "../leads.js";
 import type * as leadsActions from "../leadsActions.js";
-import type * as learn from "../learn.js";
-import type * as learnActions from "../learnActions.js";
 import type * as lib_parse from "../lib/parse.js";
 import type * as lib_providers from "../lib/providers.js";
 import type * as roleplay from "../roleplay.js";
@@ -27,12 +25,10 @@ import type {
 } from "convex/server";
 
 declare const fullApi: ApiFromModules<{
-  companyBrain: typeof companyBrain;
-  companyBrainActions: typeof companyBrainActions;
+  gtm: typeof gtm;
+  gtmActions: typeof gtmActions;
   leads: typeof leads;
   leadsActions: typeof leadsActions;
-  learn: typeof learn;
-  learnActions: typeof learnActions;
   "lib/parse": typeof lib_parse;
   "lib/providers": typeof lib_providers;
   roleplay: typeof roleplay;

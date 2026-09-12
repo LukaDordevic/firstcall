@@ -3,84 +3,176 @@
 import { v } from "convex/values";
 import { action } from "./_generated/server";
 import { api } from "./_generated/api";
-import { extractJson, hostnameAsName } from "./lib/parse";
-import { exaSearch, grokChat, scrapePages } from "./lib/providers";
+import { hostnameAsName } from "./lib/parse";
+import {
+  exaSearch,
+  exaSearchDetailed,
+  firecrawlScrape,
+  grokJson,
+} from "./lib/providers";
 
-type QualifyShape = {
-  leadName: string;
+function offeringLine(overview?: string): string {
+  return (overview ?? "this B2B product").slice(0, 180);
+}
+
+export const generateForIndustry = action({
+  args: { industryId: v.id("industries") },
+  returns: v.number(),
+  handler: async (ctx, args): Promise<number> => {
+    const industry = await ctx.runQuery(api.gtm.getIndustry, {
+      industryId: args.industryId,
+    });
+    if (!industry) throw new Error("Industry not found");
+    const profile = await ctx.runQuery(api.gtm.get, {
+      profileId: industry.gtmProfileId,
+    });
+    if (!profile || profile.status !== "ready") {
+      throw new Error("Build a GTM brain first");
+    }
+
+    const results = await exaSearchDetailed(
+      `${industry.name} companies that could buy ${offeringLine(profile.overview)}`,
+      8,
+    );
+    const items = results.slice(0, 5).map((result) => ({
+      name: result.title || hostnameAsName(result.url),
+      url: result.url,
+      oneLiner: result.text.slice(0, 180) || industry.name,
+    }));
+    const ids = await ctx.runMutation(api.leads.insertMany, {
+      gtmProfileId: profile._id,
+      leadType: "customer",
+      industryId: args.industryId,
+      items,
+    });
+    return ids.length;
+  },
+});
+
+export const generateForPartnerCategory = action({
+  args: { partnerCategoryId: v.id("partnerCategories") },
+  returns: v.number(),
+  handler: async (ctx, args): Promise<number> => {
+    const category = await ctx.runQuery(api.gtm.getPartnerCategory, {
+      partnerCategoryId: args.partnerCategoryId,
+    });
+    if (!category) throw new Error("Partner category not found");
+    const profile = await ctx.runQuery(api.gtm.get, {
+      profileId: category.gtmProfileId,
+    });
+    if (!profile || profile.status !== "ready") {
+      throw new Error("Build a GTM brain first");
+    }
+
+    const results = await exaSearchDetailed(
+      `companies well positioned to partner with ${offeringLine(profile.overview)} in ${category.name}`,
+      8,
+    );
+    const items = results.slice(0, 5).map((result) => ({
+      name: result.title || hostnameAsName(result.url),
+      url: result.url,
+      oneLiner: result.text.slice(0, 180) || category.name,
+    }));
+    const ids = await ctx.runMutation(api.leads.insertMany, {
+      gtmProfileId: profile._id,
+      leadType: "partner",
+      partnerCategoryId: args.partnerCategoryId,
+      items,
+    });
+    return ids.length;
+  },
+});
+
+type PrepShape = {
   signals: string[];
-  recommendedSolutions: string[];
+  recommendedApproach: string;
   qualifyingQuestions: string[];
   reasoning: string;
 };
 
-export const qualify = action({
-  args: { leadId: v.id("leadQualifications") },
+export const prepare = action({
+  args: { leadId: v.id("leads") },
   returns: v.null(),
   handler: async (ctx, args) => {
     const lead = await ctx.runQuery(api.leads.get, { leadId: args.leadId });
     if (!lead) throw new Error("Lead not found");
-
-    const brain = await ctx.runQuery(api.companyBrain.get, {
-      brainId: lead.companyBrainId,
+    const profile = await ctx.runQuery(api.gtm.get, {
+      profileId: lead.gtmProfileId,
     });
-    if (!brain || brain.status !== "ready") {
-      throw new Error("Company brain is not ready");
-    }
+    if (!profile) throw new Error("GTM profile not found");
+
+    await ctx.runMutation(api.leads.setStatus, {
+      leadId: args.leadId,
+      status: "researching",
+    });
 
     try {
-      const pages = await scrapePages([lead.leadUrl]);
-      const leadNameGuess = hostnameAsName(lead.leadUrl);
-      const news = await exaSearch(
-        `${leadNameGuess} news funding leadership 2026`,
-      );
+      let siteText = "";
+      try {
+        const page = await firecrawlScrape(lead.url);
+        siteText = page.markdown.slice(0, 5000);
+      } catch (error) {
+        console.error("Lead scrape failed", error);
+      }
+      const news = await exaSearch(`${lead.name} news funding leadership 2026`);
 
-      const solutions = (brain.solutions ?? [])
-        .map(
-          (solution) =>
-            `${solution.name}: ${solution.description} | ICP: ${solution.icp} | Differentiators: ${solution.differentiators.join("; ")}`,
-        )
-        .join("\n");
+      let context = "";
+      if (lead.leadType === "customer" && lead.industryId) {
+        const industry = await ctx.runQuery(api.gtm.getIndustry, {
+          industryId: lead.industryId,
+        });
+        if (industry) {
+          context = `Industry: ${industry.name}\nWhy: ${industry.reasoning}\nGTM: ${industry.gtmStrategy}`;
+        }
+      }
+      if (lead.leadType === "partner" && lead.partnerCategoryId) {
+        const category = await ctx.runQuery(api.gtm.getPartnerCategory, {
+          partnerCategoryId: lead.partnerCategoryId,
+        });
+        if (category) {
+          context = `Partner category: ${category.name}\nWhy: ${category.reasoning}\nApproach: ${category.approachStrategy}\nAngle: ${category.proposalAngle}`;
+        }
+      }
 
-      const raw = await grokChat({
+      const parsed = await grokJson<PrepShape>({
         system:
-          "You are a B2B sales coach. Cross-reference a prospect against our solutions. Return ONLY JSON.",
-        user: `Our company: ${brain.companyName}
-Overview: ${brain.overview ?? ""}
-Solutions:
-${solutions}
+          "You prepare a first B2B conversation. Return ONLY JSON. Be specific to this company.",
+        user: `Our company: ${profile.companyName}
+Overview: ${profile.overview ?? ""}
+Offering: ${JSON.stringify(profile.offering ?? [])}
 
-Prospect site (${lead.leadUrl}):
-${pages.map((page) => page.text).join("\n\n")}
+This lead (${lead.leadType}): ${lead.name} — ${lead.url}
+One-liner: ${lead.oneLiner}
+${context}
 
-Outside signals from news/search:
-${news.join("\n\n") || "None found"}
+Their site:
+${siteText || "Scrape failed; use the one-liner and news only."}
 
-Return JSON:
+News/signals:
+${news.join("\n\n") || "None"}
+
+Return:
 {
-  "leadName": string,
-  "signals": string[] (3-6 concrete news/site signals),
-  "recommendedSolutions": string[] (names from OUR solutions that fit),
-  "qualifyingQuestions": string[] (at least 5 tailored questions for a discovery call),
-  "reasoning": string (why these solutions fit, 1 short paragraph)
+  "signals": string[] (3-6 concrete),
+  "recommendedApproach": string (how to open and what to ask for),
+  "qualifyingQuestions": string[] (at least 5, tailored),
+  "reasoning": string
 }`,
       });
 
-      const parsed = extractJson<QualifyShape>(raw);
-      await ctx.runMutation(api.leads.saveReady, {
+      await ctx.runMutation(api.leads.savePrep, {
         leadId: args.leadId,
-        leadName: parsed.leadName || lead.leadName,
-        signals: parsed.signals ?? news.slice(0, 4),
-        recommendedSolutions: parsed.recommendedSolutions ?? [],
+        signals: parsed.signals ?? [],
+        recommendedApproach: parsed.recommendedApproach,
         qualifyingQuestions: parsed.qualifyingQuestions ?? [],
         reasoning: parsed.reasoning,
       });
     } catch (error) {
-      const message =
-        error instanceof Error ? error.message : "Lead research failed";
-      await ctx.runMutation(api.leads.markError, {
+      await ctx.runMutation(api.leads.setStatus, {
         leadId: args.leadId,
-        errorMessage: message,
+        status: "error",
+        errorMessage:
+          error instanceof Error ? error.message : "Lead prep failed",
       });
     }
     return null;

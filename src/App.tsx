@@ -4,51 +4,43 @@ import { useQuery } from "convex/react";
 import { api } from "../convex/_generated/api";
 import type { Id } from "../convex/_generated/dataModel";
 import { Layout } from "./components/Layout";
-import { readBrainId, readLeadId, readSessionId } from "./lib/ids";
-import { Home } from "./pages/Home";
-import { Learn } from "./pages/Learn";
-import { Qualify } from "./pages/Qualify";
+import { readLeadId, readProfileId, readSessionId } from "./lib/ids";
+import { LeadWorkspace } from "./pages/LeadWorkspace";
+import { Leads } from "./pages/Leads";
 import { Roleplay } from "./pages/Roleplay";
+import { Setup } from "./pages/Setup";
+import { Strategy } from "./pages/Strategy";
 
 export default function App() {
-  const [brainId, setBrainId] = useState<Id<"companyBrain"> | null>(null);
-  const [leadId, setLeadId] = useState<Id<"leadQualifications"> | null>(null);
-  const [sessionId, setSessionId] = useState<Id<"roleplaySessions"> | null>(null);
+  const [profileId, setProfileId] = useState<Id<"gtmProfile"> | null>(null);
+  const [, setLeadId] = useState<Id<"leads"> | null>(null);
+  const [sessionId, setSessionId] = useState<Id<"rehearsals"> | null>(null);
 
   useEffect(() => {
-    setBrainId(readBrainId());
+    setProfileId(readProfileId());
     setLeadId(readLeadId());
     setSessionId(readSessionId());
   }, []);
 
-  const brain = useQuery(api.companyBrain.get, brainId ? { brainId } : "skip");
+  const profile = useQuery(api.gtm.get, profileId ? { profileId } : "skip");
 
   return (
-    <Layout companyName={brain?.companyName}>
+    <Layout companyName={profile?.companyName}>
       <Routes>
         <Route
           path="/"
-          element={<Home brainId={brainId} onBrainId={setBrainId} />}
+          element={<Setup profileId={profileId} onProfileId={setProfileId} />}
         />
-        <Route path="/learn" element={<Learn brainId={brainId} />} />
+        <Route path="/strategy" element={<Strategy profileId={profileId} />} />
         <Route
-          path="/qualify"
-          element={
-            <Qualify
-              brainId={brainId}
-              leadId={leadId}
-              onLeadId={setLeadId}
-            />
-          }
+          path="/leads"
+          element={<Leads profileId={profileId} onLeadId={setLeadId} />}
         />
+        <Route path="/lead/:leadId" element={<LeadWorkspace />} />
         <Route
-          path="/roleplay"
+          path="/lead/:leadId/roleplay"
           element={
-            <Roleplay
-              leadId={leadId}
-              sessionId={sessionId}
-              onSessionId={setSessionId}
-            />
+            <Roleplay sessionId={sessionId} onSessionId={setSessionId} />
           }
         />
         <Route path="*" element={<Navigate to="/" replace />} />

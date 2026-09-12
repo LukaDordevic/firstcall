@@ -342,6 +342,26 @@ button.ghost,
   margin-bottom: 0.45rem;
 }
 
+.section-title {
+  font-family: var(--serif);
+  margin: 2rem 0 0.8rem;
+}
+
+.tabs {
+  display: flex;
+  gap: 0.5rem;
+  margin: 1rem 0;
+}
+
+.active-tab {
+  background: var(--cream);
+}
+
+.lead-list {
+  display: grid;
+  gap: 0.8rem;
+}
+
 @media (max-width: 720px) {
   .topbar {
     flex-wrap: wrap;
