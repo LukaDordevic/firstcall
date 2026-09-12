@@ -11,7 +11,7 @@ import { Link } from "react-router-dom";
 import { api } from "../../convex/_generated/api";
 import type { Doc, Id } from "../../convex/_generated/dataModel";
 import { StatusStrip } from "../components/StatusStrip";
-import { writeLeadId, writeProfileId } from "../lib/ids";
+import { writeLeadId } from "../lib/ids";
 
 const STEPS = [
   { id: "building", label: "Reading the company" },
@@ -151,7 +151,6 @@ export function CommandCenter({
         docStorageId = json.storageId;
       }
       const id = await start({ companyUrl: url, docStorageId });
-      writeProfileId(id);
       onProfileId(id);
       setBusy(false);
       scrollToBoard();
@@ -187,7 +186,7 @@ export function CommandCenter({
               id="company-url"
               type="url"
               required
-              placeholder="https://www.fiscobridge.com"
+              placeholder="paste your startup url"
               value={url}
               onChange={(event) => setUrl(event.target.value)}
             />

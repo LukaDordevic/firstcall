@@ -1,21 +1,15 @@
-import { useEffect, useState } from "react";
+import { useState } from "react";
 import { Navigate, Route, Routes } from "react-router-dom";
 import { useQuery } from "convex/react";
 import { api } from "../convex/_generated/api";
 import type { Id } from "../convex/_generated/dataModel";
 import { Layout } from "./components/Layout";
-import { readProfileId, readSessionId } from "./lib/ids";
 import { CommandCenter } from "./pages/CommandCenter";
 import { Roleplay } from "./pages/Roleplay";
 
 export default function App() {
   const [profileId, setProfileId] = useState<Id<"gtmProfile"> | null>(null);
   const [sessionId, setSessionId] = useState<Id<"rehearsals"> | null>(null);
-
-  useEffect(() => {
-    setProfileId(readProfileId());
-    setSessionId(readSessionId());
-  }, []);
 
   const profile = useQuery(api.gtm.get, profileId ? { profileId } : "skip");
 
