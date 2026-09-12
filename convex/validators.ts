@@ -19,6 +19,7 @@ export const gtmProfileValidator = v.object({
   overview: v.optional(v.string()),
   offering: v.optional(v.array(offeringValidator)),
   uploadedDocText: v.optional(v.string()),
+  docStorageId: v.optional(v.id("_storage")),
   errorMessage: v.optional(v.string()),
   createdAt: v.number(),
 });

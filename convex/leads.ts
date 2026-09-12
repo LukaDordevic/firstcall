@@ -25,13 +25,13 @@ export const list = query({
           q.eq("gtmProfileId", args.gtmProfileId).eq("leadType", args.leadType!),
         )
         .order("desc")
-        .take(50);
+        .take(200);
     }
     return await ctx.db
       .query("leads")
       .withIndex("by_profile", (q) => q.eq("gtmProfileId", args.gtmProfileId))
       .order("desc")
-      .take(50);
+      .take(200);
   },
 });
 

@@ -189,6 +189,8 @@ type ExaResult = {
 export async function exaSearchDetailed(
   query: string,
   numResults = 8,
+  excludeDomains: string[] = [],
+  category?: "company" | "news",
 ): Promise<Array<{ title: string; url: string; text: string }>> {
   const key = requireEnv("EXA_API_KEY");
   const response = await fetch(`${EXA_BASE}/search`, {
@@ -202,6 +204,8 @@ export async function exaSearchDetailed(
       type: "auto",
       numResults,
       contents: { text: true },
+      excludeDomains,
+      ...(category ? { category } : {}),
     }),
   });
   const payload = (await readJson(response, "Exa search")) as {

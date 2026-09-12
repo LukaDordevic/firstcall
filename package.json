@@ -12,7 +12,9 @@
   "dependencies": {
     "@tailwindcss/vite": "^4.3.3",
     "convex": "^1.45.0",
+    "mammoth": "^1.12.3",
     "openai": "^7.15.0",
+    "pdf-parse": "^1.1.1",
     "react": "^19.2.8",
     "react-dom": "^19.2.8",
     "react-router-dom": "^7.18.3",
@@ -21,6 +23,7 @@
   "devDependencies": {
     "@convex-dev/eslint-plugin": "^4.0.0",
     "@types/node": "^24.13.3",
+    "@types/pdf-parse": "^1.1.5",
     "@types/react": "^19.2.18",
     "@types/react-dom": "^19.2.7",
     "@vitejs/plugin-react": "^6.1.1",

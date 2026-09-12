@@ -56,8 +56,8 @@ export function Roleplay({
       <section className="page">
         <h1>Roleplay</h1>
         <p className="lede">Prepare a lead first.</p>
-        <Link to="/leads" className="text-link">
-          Back to leads
+        <Link to="/" className="text-link">
+          Back to intelligence
         </Link>
       </section>
     );
@@ -136,6 +136,9 @@ export function Roleplay({
     <section className="page roleplay">
       <p className="kicker">{counterpart}</p>
       <h1>Rehearse the conversation</h1>
+      <Link to="/" className="text-link">
+        Back to intelligence
+      </Link>
 
       {!session ? (
         <div className="start-panel">

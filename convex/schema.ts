@@ -21,6 +21,7 @@ export default defineSchema({
       ),
     ),
     uploadedDocText: v.optional(v.string()),
+    docStorageId: v.optional(v.id("_storage")),
     errorMessage: v.optional(v.string()),
     createdAt: v.number(),
   }).index("by_createdAt", ["createdAt"]),

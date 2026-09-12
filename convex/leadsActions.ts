@@ -1,21 +1,101 @@
 "use node";
 
 import { v } from "convex/values";
-import { action } from "./_generated/server";
+import { internal } from "./_generated/api";
 import { api } from "./_generated/api";
-import { hostnameAsName } from "./lib/parse";
+import { action, internalAction } from "./_generated/server";
+import { hostnameAsName, hostnameOf } from "./lib/parse";
 import {
   exaSearch,
   exaSearchDetailed,
-  firecrawlScrape,
   grokJson,
 } from "./lib/providers";
 
-function offeringLine(overview?: string): string {
-  return (overview ?? "this B2B product").slice(0, 180);
+type CompanyItem = { name: string; url: string; oneLiner: string };
+
+function ownHosts(companyUrl: string): string[] {
+  const host = hostnameOf(companyUrl);
+  const extras = [
+    "wikipedia.org",
+    "youtube.com",
+    "reddit.com",
+    "linkedin.com",
+    "crunchbase.com",
+  ];
+  return host ? [host, `www.${host}`, ...extras] : extras;
 }
 
-export const generateForIndustry = action({
+function notOwnSite(
+  item: { name: string; url: string },
+  companyUrl: string,
+  companyName: string,
+): boolean {
+  const host = hostnameOf(item.url);
+  const own = hostnameOf(companyUrl);
+  if (!host) return false;
+  if (own && (host === own || host.endsWith(`.${own}`))) return false;
+  const brand = companyName.toLowerCase().replace(/\s+/g, "");
+  if (brand && host.replace(/[^a-z0-9]/g, "").includes(brand) && brand.length > 4) {
+    return false;
+  }
+  return true;
+}
+
+async function findCompanies(args: {
+  query: string;
+  excludeDomains: string[];
+  companyUrl: string;
+  companyName: string;
+  label: string;
+}): Promise<CompanyItem[]> {
+  let raw = await exaSearchDetailed(
+    args.query,
+    20,
+    args.excludeDomains,
+    "company",
+  );
+  if (raw.length < 8) {
+    const extra = await exaSearchDetailed(args.query, 20, args.excludeDomains);
+    const seen = new Set(raw.map((item) => item.url));
+    raw = [...raw, ...extra.filter((item) => !seen.has(item.url))];
+  }
+  const filtered = raw.filter((item) =>
+    notOwnSite(item, args.companyUrl, args.companyName),
+  );
+
+  try {
+    const picked = await grokJson<{ items: CompanyItem[] }>({
+      system:
+        "You extract real third-party companies from search results. Return ONLY JSON.",
+      user: `We sell for ${args.companyName} (${args.companyUrl}).
+Need 12-16 REAL companies for: ${args.label}
+Reject anything that is ${args.companyName}, their own product pages, news about them, or directories.
+
+Search results:
+${filtered
+  .map((item) => `${item.title} | ${item.url}\n${item.text}`)
+  .join("\n\n")}
+
+Return { "items": [{ "name": string, "url": string, "oneLiner": string }] }
+Use the company's own homepage URL when possible, not an article.`,
+    });
+    const items = (picked.items ?? []).filter((item) =>
+      notOwnSite(item, args.companyUrl, args.companyName),
+    );
+    if (items.length >= 8) return items.slice(0, 16);
+  } catch (error) {
+    console.error("Company extract failed, using filtered Exa hits", error);
+  }
+
+  return filtered.slice(0, 16).map((item) => ({
+    name: item.title.split(" | ")[0] || hostnameAsName(item.url),
+    url: item.url,
+    oneLiner: item.text.slice(0, 180),
+  }));
+}
+
+
+export const generateForIndustryInternal = internalAction({
   args: { industryId: v.id("industries") },
   returns: v.number(),
   handler: async (ctx, args): Promise<number> => {
@@ -30,26 +110,33 @@ export const generateForIndustry = action({
       throw new Error("Build a GTM brain first");
     }
 
-    const results = await exaSearchDetailed(
-      `${industry.name} companies that could buy ${offeringLine(profile.overview)}`,
-      8,
-    );
-    const items = results.slice(0, 5).map((result) => ({
-      name: result.title || hostnameAsName(result.url),
-      url: result.url,
-      oneLiner: result.text.slice(0, 180) || industry.name,
-    }));
+    const items = await findCompanies({
+      query: `${industry.name} companies groups chains operators official company website`,
+      excludeDomains: ownHosts(profile.companyUrl),
+      companyUrl: profile.companyUrl,
+      companyName: profile.companyName,
+      label: `direct customers in ${industry.name}`,
+    });
+
+    if (items.length === 0) return 0;
     const ids = await ctx.runMutation(api.leads.insertMany, {
       gtmProfileId: profile._id,
       leadType: "customer",
       industryId: args.industryId,
       items,
     });
+    await Promise.all(
+      ids.map((leadId, index) =>
+        ctx.scheduler.runAfter(index * 150, internal.leadsActions.prepareInternal, {
+          leadId,
+        }),
+      ),
+    );
     return ids.length;
   },
 });
 
-export const generateForPartnerCategory = action({
+export const generateForPartnerInternal = internalAction({
   args: { partnerCategoryId: v.id("partnerCategories") },
   returns: v.number(),
   handler: async (ctx, args): Promise<number> => {
@@ -64,21 +151,28 @@ export const generateForPartnerCategory = action({
       throw new Error("Build a GTM brain first");
     }
 
-    const results = await exaSearchDetailed(
-      `companies well positioned to partner with ${offeringLine(profile.overview)} in ${category.name}`,
-      8,
-    );
-    const items = results.slice(0, 5).map((result) => ({
-      name: result.title || hostnameAsName(result.url),
-      url: result.url,
-      oneLiner: result.text.slice(0, 180) || category.name,
-    }));
+    const items = await findCompanies({
+      query: `${category.name} firms agencies platforms vendors official company website`,
+      excludeDomains: ownHosts(profile.companyUrl),
+      companyUrl: profile.companyUrl,
+      companyName: profile.companyName,
+      label: `partners in ${category.name}`,
+    });
+
+    if (items.length === 0) return 0;
     const ids = await ctx.runMutation(api.leads.insertMany, {
       gtmProfileId: profile._id,
       leadType: "partner",
       partnerCategoryId: args.partnerCategoryId,
       items,
     });
+    await Promise.all(
+      ids.map((leadId, index) =>
+        ctx.scheduler.runAfter(index * 150, internal.leadsActions.prepareInternal, {
+          leadId,
+        }),
+      ),
+    );
     return ids.length;
   },
 });
@@ -90,12 +184,13 @@ type PrepShape = {
   reasoning: string;
 };
 
-export const prepare = action({
+export const prepareInternal = internalAction({
   args: { leadId: v.id("leads") },
   returns: v.null(),
   handler: async (ctx, args) => {
     const lead = await ctx.runQuery(api.leads.get, { leadId: args.leadId });
     if (!lead) throw new Error("Lead not found");
+    if (lead.status === "ready") return null;
     const profile = await ctx.runQuery(api.gtm.get, {
       profileId: lead.gtmProfileId,
     });
@@ -107,14 +202,9 @@ export const prepare = action({
     });
 
     try {
-      let siteText = "";
-      try {
-        const page = await firecrawlScrape(lead.url);
-        siteText = page.markdown.slice(0, 5000);
-      } catch (error) {
-        console.error("Lead scrape failed", error);
-      }
-      const news = await exaSearch(`${lead.name} news funding leadership 2026`);
+      const news = await exaSearch(
+        `${lead.name} ${hostnameOf(lead.url)} news funding leadership 2026`,
+      );
 
       let context = "";
       if (lead.leadType === "customer" && lead.industryId) {
@@ -142,11 +232,8 @@ Overview: ${profile.overview ?? ""}
 Offering: ${JSON.stringify(profile.offering ?? [])}
 
 This lead (${lead.leadType}): ${lead.name} — ${lead.url}
-One-liner: ${lead.oneLiner}
+Known context: ${lead.oneLiner}
 ${context}
-
-Their site:
-${siteText || "Scrape failed; use the one-liner and news only."}
 
 News/signals:
 ${news.join("\n\n") || "None"}
@@ -175,6 +262,31 @@ Return:
           error instanceof Error ? error.message : "Lead prep failed",
       });
     }
+    return null;
+  },
+});
+
+export const generateForIndustry = action({
+  args: { industryId: v.id("industries") },
+  returns: v.number(),
+  handler: async (ctx, args): Promise<number> => {
+    return await ctx.runAction(internal.leadsActions.generateForIndustryInternal, args);
+  },
+});
+
+export const generateForPartnerCategory = action({
+  args: { partnerCategoryId: v.id("partnerCategories") },
+  returns: v.number(),
+  handler: async (ctx, args): Promise<number> => {
+    return await ctx.runAction(internal.leadsActions.generateForPartnerInternal, args);
+  },
+});
+
+export const prepare = action({
+  args: { leadId: v.id("leads") },
+  returns: v.null(),
+  handler: async (ctx, args) => {
+    await ctx.runAction(internal.leadsActions.prepareInternal, args);
     return null;
   },
 });

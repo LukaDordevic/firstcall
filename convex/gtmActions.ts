@@ -2,7 +2,7 @@
 
 import { v } from "convex/values";
 import { action } from "./_generated/server";
-import { api } from "./_generated/api";
+import { api, internal } from "./_generated/api";
 import {
   firecrawlMap,
   grokJson,
@@ -32,6 +32,20 @@ type BrainShape = {
   }>;
 };
 
+async function extractDocText(fileUrl: string): Promise<string> {
+  const response = await fetch(fileUrl);
+  const buffer = Buffer.from(await response.arrayBuffer());
+  const contentType = response.headers.get("content-type") ?? "";
+  if (contentType.includes("pdf") || fileUrl.toLowerCase().includes(".pdf")) {
+    const pdfParse = (await import("pdf-parse")).default;
+    const parsed = await pdfParse(buffer);
+    return parsed.text.slice(0, 12000);
+  }
+  const mammoth = await import("mammoth");
+  const parsed = await mammoth.extractRawText({ buffer });
+  return parsed.value.slice(0, 12000);
+}
+
 export const build = action({
   args: { profileId: v.id("gtmProfile") },
   returns: v.null(),
@@ -42,6 +56,24 @@ export const build = action({
     if (!profile) throw new Error("GTM profile not found");
 
     try {
+      let docText = profile.uploadedDocText ?? "";
+      if (!docText && profile.docStorageId) {
+        try {
+          const fileUrl = await ctx.runQuery(api.gtm.fileUrl, {
+            storageId: profile.docStorageId,
+          });
+          docText = fileUrl ? await extractDocText(fileUrl) : "";
+          if (docText) {
+            await ctx.runMutation(api.gtm.attachDocText, {
+              profileId: args.profileId,
+              uploadedDocText: docText,
+            });
+          }
+        } catch (error) {
+          console.error("Doc parse failed", error);
+        }
+      }
+
       let mapped: string[] = [];
       try {
         mapped = await firecrawlMap(profile.companyUrl);
@@ -59,7 +91,7 @@ export const build = action({
           "You are a B2B GTM strategist. Return ONLY JSON. No consumer/B2C advice.",
         user: `Startup website: ${profile.companyUrl}
 
-From the scraped pages, return:
+From the scraped pages${docText ? " and uploaded deck/plan" : ""}, return:
 {
   "companyName": string,
   "overview": string (4-6 sentences: what they sell, to whom, why it is B2B),
@@ -89,10 +121,12 @@ Rules:
 - B2B only.
 
 SCRAPED PAGES:
-${corpus}`,
+${corpus}
+
+${docText ? `UPLOADED DECK / PLAN:\n${docText}` : ""}`,
       });
 
-      await ctx.runMutation(api.gtm.saveReady, {
+      const saved = await ctx.runMutation(api.gtm.saveReady, {
         profileId: args.profileId,
         companyName: parsed.companyName || profile.companyName,
         overview: parsed.overview,
@@ -100,6 +134,23 @@ ${corpus}`,
         industries: (parsed.industries ?? []).slice(0, 5),
         partnerCategories: (parsed.partnerCategories ?? []).slice(0, 4),
       });
+
+      await Promise.all([
+        ...saved.industryIds.map((industryId) =>
+          ctx.scheduler.runAfter(
+            0,
+            internal.leadsActions.generateForIndustryInternal,
+            { industryId },
+          ),
+        ),
+        ...saved.partnerCategoryIds.map((partnerCategoryId) =>
+          ctx.scheduler.runAfter(
+            0,
+            internal.leadsActions.generateForPartnerInternal,
+            { partnerCategoryId },
+          ),
+        ),
+      ]);
     } catch (error) {
       const message =
         error instanceof Error ? error.message : "GTM research failed";

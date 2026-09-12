@@ -1,4 +1,5 @@
 import { v } from "convex/values";
+import type { Id } from "./_generated/dataModel";
 import { mutation, query } from "./_generated/server";
 import { hostnameAsName, normalizeUrl } from "./lib/parse";
 import {
@@ -8,8 +9,19 @@ import {
   partnerCategoryValidator,
 } from "./validators";
 
+export const generateUploadUrl = mutation({
+  args: {},
+  returns: v.string(),
+  handler: async (ctx) => {
+    return await ctx.storage.generateUploadUrl();
+  },
+});
+
 export const start = mutation({
-  args: { companyUrl: v.string() },
+  args: {
+    companyUrl: v.string(),
+    docStorageId: v.optional(v.id("_storage")),
+  },
   returns: v.id("gtmProfile"),
   handler: async (ctx, args) => {
     const companyUrl = normalizeUrl(args.companyUrl);
@@ -17,8 +29,28 @@ export const start = mutation({
       companyUrl,
       companyName: hostnameAsName(companyUrl),
       status: "building",
+      docStorageId: args.docStorageId,
       createdAt: Date.now(),
     });
+  },
+});
+
+export const attachDocText = mutation({
+  args: { profileId: v.id("gtmProfile"), uploadedDocText: v.string() },
+  returns: v.null(),
+  handler: async (ctx, args) => {
+    const profile = await ctx.db.get(args.profileId);
+    if (!profile) throw new Error("GTM profile not found");
+    await ctx.db.patch(args.profileId, { uploadedDocText: args.uploadedDocText });
+    return null;
+  },
+});
+
+export const fileUrl = query({
+  args: { storageId: v.id("_storage") },
+  returns: v.union(v.string(), v.null()),
+  handler: async (ctx, args) => {
+    return await ctx.storage.getUrl(args.storageId);
   },
 });
 
@@ -65,7 +97,10 @@ export const saveReady = mutation({
       }),
     ),
   },
-  returns: v.null(),
+  returns: v.object({
+    industryIds: v.array(v.id("industries")),
+    partnerCategoryIds: v.array(v.id("partnerCategories")),
+  }),
   handler: async (ctx, args) => {
     const profile = await ctx.db.get(args.profileId);
     if (!profile) throw new Error("GTM profile not found");
@@ -77,21 +112,27 @@ export const saveReady = mutation({
       errorMessage: undefined,
     });
     const now = Date.now();
+    const industryIds: Array<Id<"industries">> = [];
     for (const industry of args.industries) {
-      await ctx.db.insert("industries", {
-        gtmProfileId: args.profileId,
-        ...industry,
-        createdAt: now,
-      });
+      industryIds.push(
+        await ctx.db.insert("industries", {
+          gtmProfileId: args.profileId,
+          ...industry,
+          createdAt: now,
+        }),
+      );
     }
+    const partnerCategoryIds: Array<Id<"partnerCategories">> = [];
     for (const category of args.partnerCategories) {
-      await ctx.db.insert("partnerCategories", {
-        gtmProfileId: args.profileId,
-        ...category,
-        createdAt: now,
-      });
+      partnerCategoryIds.push(
+        await ctx.db.insert("partnerCategories", {
+          gtmProfileId: args.profileId,
+          ...category,
+          createdAt: now,
+        }),
+      );
     }
-    return null;
+    return { industryIds, partnerCategoryIds };
   },
 });
 

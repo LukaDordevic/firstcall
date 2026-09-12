@@ -13,6 +13,14 @@ export function normalizeUrl(raw: string): string {
   return parsed.toString();
 }
 
+export function hostnameOf(url: string): string {
+  try {
+    return new URL(url).hostname.replace(/^www\./, "").toLowerCase();
+  } catch {
+    return "";
+  }
+}
+
 export function hostnameAsName(url: string): string {
   try {
     const host = new URL(url).hostname.replace(/^www\./, "");
