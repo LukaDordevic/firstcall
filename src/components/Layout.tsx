@@ -19,6 +19,17 @@ export function Layout({
         <p className="company-chip">{companyName ?? "No company yet"}</p>
       </header>
       <main className="wide">{children}</main>
+      <footer className="site-footer">
+        <p>Built with</p>
+        <ul>
+          <li>Convex</li>
+          <li>Firecrawl</li>
+          <li>Exa</li>
+          <li>x.ai Grok</li>
+          <li>React</li>
+          <li>Render</li>
+        </ul>
+      </footer>
     </div>
   );
 }

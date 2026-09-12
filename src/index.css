@@ -48,6 +48,8 @@ a {
 
 .app-shell {
   min-height: 100svh;
+  display: flex;
+  flex-direction: column;
 }
 
 .topbar {
@@ -130,6 +132,41 @@ main {
 
 main.wide {
   width: min(1180px, calc(100% - 2rem));
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+}
+
+.site-footer {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: center;
+  gap: 0.7rem 1rem;
+  padding: 1rem 1.5rem 1.3rem;
+  border-top: 1px solid var(--line);
+  color: var(--muted);
+  font-size: 0.82rem;
+}
+
+.site-footer p {
+  margin: 0;
+}
+
+.site-footer ul {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.45rem;
+  list-style: none;
+  margin: 0;
+  padding: 0;
+}
+
+.site-footer li {
+  padding: 0.25rem 0.65rem;
+  border: 1px solid var(--line);
+  border-radius: 999px;
+  color: var(--cream);
 }
 
 .page h1,
@@ -402,10 +439,14 @@ button.ghost,
   gap: 0.8rem;
 }
 
-.command.landing {
-  min-height: calc(100svh - 7rem);
+.page.command {
+  flex: 1;
   display: flex;
   flex-direction: column;
+}
+
+.command.landing {
+  min-height: 0;
   justify-content: center;
 }
 
