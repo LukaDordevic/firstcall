@@ -13,7 +13,7 @@ function Root() {
     return (
       <div className="app-shell">
         <section className="page">
-          <h1>Beachhead is almost live</h1>
+          <h1>1stDeal is almost live</h1>
           <p className="lede">
             Set <code>VITE_CONVEX_URL</code> on the host and rebuild. Convex is
             the live memory layer for the company brain.

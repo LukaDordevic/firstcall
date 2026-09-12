@@ -1,4 +1,4 @@
-# Beachhead
+# 1stDeal
 
 Live app: https://firstcall-3dtg.onrender.com  
 Repo: https://github.com/LukaDordevic/firstcall

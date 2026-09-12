@@ -1,5 +1,12 @@
 import { useAction, useMutation, useQuery } from "convex/react";
-import { useMemo, useRef, useState, type DragEvent, type FormEvent } from "react";
+import {
+  useEffect,
+  useMemo,
+  useRef,
+  useState,
+  type DragEvent,
+  type FormEvent,
+} from "react";
 import { Link } from "react-router-dom";
 import { api } from "../../convex/_generated/api";
 import type { Doc, Id } from "../../convex/_generated/dataModel";
@@ -39,6 +46,7 @@ export function CommandCenter({
   const [dragOver, setDragOver] = useState(false);
   const [fileHint, setFileHint] = useState<string | null>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
+  const boardRef = useRef<HTMLDivElement>(null);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [typeFilter, setTypeFilter] = useState<"all" | "customer" | "partner">(
@@ -110,6 +118,12 @@ export function CommandCenter({
     acceptFile(event.dataTransfer.files[0]);
   }
 
+  function scrollToBoard() {
+    window.requestAnimationFrame(() => {
+      boardRef.current?.scrollIntoView({ behavior: "smooth", block: "start" });
+    });
+  }
+
   async function onSubmit(event: FormEvent) {
     event.preventDefault();
     setError(null);
@@ -140,6 +154,7 @@ export function CommandCenter({
       writeProfileId(id);
       onProfileId(id);
       setBusy(false);
+      scrollToBoard();
       void build({ profileId: id }).catch((err: unknown) => {
         setError(err instanceof Error ? err.message : "Could not start research");
       });
@@ -153,18 +168,19 @@ export function CommandCenter({
   const showBoard = Boolean(profile && profile.status !== "error");
   const readyCount = (leads ?? []).filter((lead) => lead.status === "ready").length;
 
+  useEffect(() => {
+    if (showBoard) {
+      scrollToBoard();
+    }
+  }, [showBoard]);
+
   return (
-    <section className={selected ? "page command with-drawer" : "page command"}>
-      <div className="command-top">
-        <div>
-          <p className="kicker">Central intelligence</p>
-          <h1>Beachhead</h1>
-          <p className="lede">
-            Paste the startup. Optional deck. Industries and real companies fill
-            in live — pick a lead on the right for the approach.
-          </p>
-        </div>
-        <form onSubmit={onSubmit} className="url-form compact">
+    <section className={showBoard ? "page command started" : "page command landing"}>
+      <div className="hero">
+        <p className="kicker">1stDeal</p>
+        <h1>Find the first deal.</h1>
+        <p className="lede motto">A GTM Intelligence for early Startups</p>
+        <form onSubmit={onSubmit} className="intake">
           <label htmlFor="company-url">Startup URL</label>
           <div className="row">
             <input
@@ -176,11 +192,13 @@ export function CommandCenter({
               onChange={(event) => setUrl(event.target.value)}
             />
             <button type="submit" disabled={working}>
-              {working ? "Building…" : "Run"}
+              {working ? "Building…" : "Start"}
             </button>
           </div>
           <div
-            className={dragOver ? "dropzone over" : file ? "dropzone" : "dropzone clickable"}
+            className={
+              dragOver ? "dropzone over" : file ? "dropzone" : "dropzone clickable"
+            }
             onClick={() => {
               if (!file) fileInputRef.current?.click();
             }}
@@ -245,148 +263,187 @@ export function CommandCenter({
             )}
           </div>
           {fileHint ? <p className="error">{fileHint}</p> : null}
+          {error ? <p className="error">{error}</p> : null}
         </form>
       </div>
-      {error ? <p className="error">{error}</p> : null}
-      {profile ? (
-        <StatusStrip
-          steps={STEPS}
-          current={profile.status === "error" ? "building" : profile.status}
-          error={profile.errorMessage}
-        />
-      ) : null}
 
-      {showBoard ? (
-        <div className="command-grid">
-          <div className="command-left">
-            {profile?.overview ? (
-              <article className="solution-card">
-                <h3>{profile.companyName}</h3>
-                <p>{profile.overview}</p>
-              </article>
-            ) : (
-              <article className="solution-card">
-                <p className="pulse">Reading the company…</p>
-              </article>
-            )}
-            <h2 className="section-title">Direct customers</h2>
-            {(industries ?? []).length === 0 && profile?.status === "building" ? (
-              <p className="empty">Industries appear as soon as the brain is ready.</p>
-            ) : null}
-            {(industries ?? []).map((industry) => (
-              <button
-                key={industry._id}
-                type="button"
-                className={
-                  groupFilter === industry._id ? "filter-card active" : "filter-card"
-                }
-                onClick={() => {
-                  setTypeFilter("customer");
-                  setGroupFilter(industry._id);
-                }}
-              >
-                <strong>{industry.name}</strong>
-                <em>{counts.byIndustry.get(industry._id) ?? 0} leads</em>
-                <span>{industry.reasoning}</span>
-              </button>
-            ))}
-            <h2 className="section-title">Partners</h2>
-            {(partners ?? []).map((category) => (
-              <button
-                key={category._id}
-                type="button"
-                className={
-                  groupFilter === category._id ? "filter-card active" : "filter-card"
-                }
-                onClick={() => {
-                  setTypeFilter("partner");
-                  setGroupFilter(category._id);
-                }}
-              >
-                <strong>{category.name}</strong>
-                <em>{counts.byPartner.get(category._id) ?? 0} leads</em>
-                <span>{category.reasoning}</span>
-              </button>
-            ))}
-          </div>
+      <div ref={boardRef} className="board">
+        {profile ? (
+          <StatusStrip
+            steps={STEPS}
+            current={profile.status === "error" ? "building" : profile.status}
+            error={profile.errorMessage}
+          />
+        ) : null}
 
-          <div className="command-right">
-            <div className="tabs">
-              <button
-                type="button"
-                className={typeFilter === "all" && groupFilter === "all" ? "active-tab" : "ghost"}
-                onClick={() => {
-                  setTypeFilter("all");
-                  setGroupFilter("all");
-                }}
-              >
-                All ({leads?.length ?? 0})
-              </button>
-              <button
-                type="button"
-                className={typeFilter === "customer" && groupFilter === "all" ? "active-tab" : "ghost"}
-                onClick={() => {
-                  setTypeFilter("customer");
-                  setGroupFilter("all");
-                }}
-              >
-                Direct
-              </button>
-              <button
-                type="button"
-                className={typeFilter === "partner" && groupFilter === "all" ? "active-tab" : "ghost"}
-                onClick={() => {
-                  setTypeFilter("partner");
-                  setGroupFilter("all");
-                }}
-              >
-                Partners
-              </button>
-            </div>
-            <p className="meta">
-              {readyCount} of {leads?.length ?? 0} approaches written
-            </p>
-            <div className="lead-list">
-              {filtered.length === 0 ? (
-                <p className="empty">
-                  {profile?.status === "ready"
-                    ? "Searching the live web for companies — they appear here as each industry agent finishes."
-                    : "Leads will stream in once the brain is ready."}
-                </p>
+        {showBoard ? (
+          <>
+            <section className="segment">
+              <p className="segment-label">Company</p>
+              {profile?.overview ? (
+                <article className="solution-card">
+                  <h3>{profile.companyName}</h3>
+                  <p>{profile.overview}</p>
+                </article>
               ) : (
-                filtered.map((lead) => (
-                  <button
-                    key={lead._id}
-                    type="button"
-                    className={
-                      selectedId === lead._id ? "lead-row active" : "lead-row"
-                    }
-                    onClick={() => {
-                      setSelectedId(lead._id);
-                      writeLeadId(lead._id);
-                    }}
-                  >
-                    <strong>{lead.name}</strong>
-                    <span>{lead.oneLiner}</span>
-                    <em>
-                      {groupLabel(lead)} · {lead.status}
-                    </em>
-                  </button>
-                ))
+                <article className="solution-card">
+                  <p className="pulse">Reading the company…</p>
+                </article>
               )}
-            </div>
-          </div>
+            </section>
 
-          {selected ? (
-            <LeadDrawer
-              lead={selected}
-              prep={prep}
-              group={groupLabel(selected)}
-              onClose={() => setSelectedId(null)}
-            />
-          ) : null}
-        </div>
-      ) : null}
+            <section className="segment">
+              <p className="segment-label">Markets</p>
+              <div className="market-grid">
+                <div>
+                  <h2 className="section-title">Direct customers</h2>
+                  {(industries ?? []).length === 0 ? (
+                    <p className="empty">Industries appear as soon as the brain is ready.</p>
+                  ) : (
+                    (industries ?? []).map((industry) => (
+                      <button
+                        key={industry._id}
+                        type="button"
+                        className={
+                          groupFilter === industry._id
+                            ? "filter-card active"
+                            : "filter-card"
+                        }
+                        onClick={() => {
+                          setTypeFilter("customer");
+                          setGroupFilter(industry._id);
+                        }}
+                      >
+                        <strong>{industry.name}</strong>
+                        <em>{counts.byIndustry.get(industry._id) ?? 0} leads</em>
+                        <span>{industry.reasoning}</span>
+                      </button>
+                    ))
+                  )}
+                </div>
+                <div>
+                  <h2 className="section-title">Partners</h2>
+                  {(partners ?? []).length === 0 ? (
+                    <p className="empty">Partner categories stream in next.</p>
+                  ) : (
+                    (partners ?? []).map((category) => (
+                      <button
+                        key={category._id}
+                        type="button"
+                        className={
+                          groupFilter === category._id
+                            ? "filter-card active"
+                            : "filter-card"
+                        }
+                        onClick={() => {
+                          setTypeFilter("partner");
+                          setGroupFilter(category._id);
+                        }}
+                      >
+                        <strong>{category.name}</strong>
+                        <em>{counts.byPartner.get(category._id) ?? 0} leads</em>
+                        <span>{category.reasoning}</span>
+                      </button>
+                    ))
+                  )}
+                </div>
+              </div>
+            </section>
+
+            <section className={selected ? "segment pipeline with-drawer" : "segment pipeline"}>
+              <p className="segment-label">Leads</p>
+              <div className="command-grid">
+                <div className="command-right">
+                  <div className="tabs">
+                    <button
+                      type="button"
+                      className={
+                        typeFilter === "all" && groupFilter === "all"
+                          ? "active-tab"
+                          : "ghost"
+                      }
+                      onClick={() => {
+                        setTypeFilter("all");
+                        setGroupFilter("all");
+                      }}
+                    >
+                      All ({leads?.length ?? 0})
+                    </button>
+                    <button
+                      type="button"
+                      className={
+                        typeFilter === "customer" && groupFilter === "all"
+                          ? "active-tab"
+                          : "ghost"
+                      }
+                      onClick={() => {
+                        setTypeFilter("customer");
+                        setGroupFilter("all");
+                      }}
+                    >
+                      Direct
+                    </button>
+                    <button
+                      type="button"
+                      className={
+                        typeFilter === "partner" && groupFilter === "all"
+                          ? "active-tab"
+                          : "ghost"
+                      }
+                      onClick={() => {
+                        setTypeFilter("partner");
+                        setGroupFilter("all");
+                      }}
+                    >
+                      Partners
+                    </button>
+                  </div>
+                  <p className="meta">
+                    {readyCount} of {leads?.length ?? 0} approaches written
+                  </p>
+                  <div className="lead-list">
+                    {filtered.length === 0 ? (
+                      <p className="empty">
+                        {profile?.status === "ready"
+                          ? "Searching the live web for companies — they appear here as each industry agent finishes."
+                          : "Leads will stream in once the brain is ready."}
+                      </p>
+                    ) : (
+                      filtered.map((lead) => (
+                        <button
+                          key={lead._id}
+                          type="button"
+                          className={
+                            selectedId === lead._id ? "lead-row active" : "lead-row"
+                          }
+                          onClick={() => {
+                            setSelectedId(lead._id);
+                            writeLeadId(lead._id);
+                          }}
+                        >
+                          <strong>{lead.name}</strong>
+                          <span>{lead.oneLiner}</span>
+                          <em>
+                            {groupLabel(lead)} · {lead.status}
+                          </em>
+                        </button>
+                      ))
+                    )}
+                  </div>
+                </div>
+                {selected ? (
+                  <LeadDrawer
+                    lead={selected}
+                    prep={prep}
+                    group={groupLabel(selected)}
+                    onClose={() => setSelectedId(null)}
+                  />
+                ) : null}
+              </div>
+            </section>
+          </>
+        ) : null}
+      </div>
     </section>
   );
 }

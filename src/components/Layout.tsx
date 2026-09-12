@@ -12,10 +12,11 @@ export function Layout({
     <div className="app-shell">
       <header className="topbar">
         <NavLink to="/" className="wordmark">
-          <span className="mark">BH</span>
-          Beachhead
+          <span className="mark">1</span>
+          1stDeal
         </NavLink>
-        <p className="company-chip">{companyName ?? "No GTM brain yet"}</p>
+        <p className="motto-chip">A GTM Intelligence for early Startups</p>
+        <p className="company-chip">{companyName ?? "No company yet"}</p>
       </header>
       <main className="wide">{children}</main>
     </div>
