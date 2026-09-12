@@ -1,5 +1,8 @@
 # FirstCall
 
+Live app: https://firstcall-3dtg.onrender.com  
+Repo: https://github.com/LukaDordevic/firstcall
+
 An AI onboarding and call-prep agent for new B2B sales reps.
 
 Paste your employer’s website. FirstCall crawls it into a live **company brain** (Convex), then a rep can:
