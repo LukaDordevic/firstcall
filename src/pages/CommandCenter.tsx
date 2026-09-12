@@ -1,5 +1,5 @@
 import { useAction, useMutation, useQuery } from "convex/react";
-import { useMemo, useState, type FormEvent } from "react";
+import { useMemo, useRef, useState, type DragEvent, type FormEvent } from "react";
 import { Link } from "react-router-dom";
 import { api } from "../../convex/_generated/api";
 import type { Doc, Id } from "../../convex/_generated/dataModel";
@@ -36,6 +36,9 @@ export function CommandCenter({
   const build = useAction(api.gtmActions.build);
   const [url, setUrl] = useState("");
   const [file, setFile] = useState<File | null>(null);
+  const [dragOver, setDragOver] = useState(false);
+  const [fileHint, setFileHint] = useState<string | null>(null);
+  const fileInputRef = useRef<HTMLInputElement>(null);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [typeFilter, setTypeFilter] = useState<"all" | "customer" | "partner">(
@@ -88,6 +91,23 @@ export function CommandCenter({
       );
     }
     return lead.leadType;
+  }
+
+  function acceptFile(next: File | undefined) {
+    if (!next) return;
+    const kind = next.name.toLowerCase();
+    if (!kind.endsWith(".pdf") && !kind.endsWith(".docx")) {
+      setFileHint("Use a PDF or DOCX. Export a PPTX to PDF first.");
+      return;
+    }
+    setFileHint(null);
+    setFile(next);
+  }
+
+  function onDrop(event: DragEvent<HTMLDivElement>) {
+    event.preventDefault();
+    setDragOver(false);
+    acceptFile(event.dataTransfer.files[0]);
   }
 
   async function onSubmit(event: FormEvent) {
@@ -159,15 +179,72 @@ export function CommandCenter({
               {working ? "Building…" : "Run"}
             </button>
           </div>
-          <label className="file-label">
-            Optional deck / plan (PDF or DOCX)
+          <div
+            className={dragOver ? "dropzone over" : file ? "dropzone" : "dropzone clickable"}
+            onClick={() => {
+              if (!file) fileInputRef.current?.click();
+            }}
+            onDragEnter={(event) => {
+              event.preventDefault();
+              setDragOver(true);
+            }}
+            onDragOver={(event) => {
+              event.preventDefault();
+              setDragOver(true);
+            }}
+            onDragLeave={(event) => {
+              event.preventDefault();
+              setDragOver(false);
+            }}
+            onDrop={onDrop}
+          >
             <input
+              ref={fileInputRef}
+              id="deck-file"
+              className="sr-only"
               type="file"
               accept=".pdf,.docx,application/pdf,application/vnd.openxmlformats-officedocument.wordprocessingml.document"
-              onChange={(event) => setFile(event.target.files?.[0] ?? null)}
+              onChange={(event) => acceptFile(event.target.files?.[0])}
             />
-          </label>
-          {file ? <p className="meta">{file.name}</p> : null}
+            {file ? (
+              <div className="dropzone-file">
+                <div>
+                  <p className="dropzone-kicker">Attached deck</p>
+                  <p className="dropzone-name">{file.name}</p>
+                </div>
+                <button
+                  type="button"
+                  className="ghost"
+                  onClick={(event) => {
+                    event.stopPropagation();
+                    setFile(null);
+                    setFileHint(null);
+                    if (fileInputRef.current) fileInputRef.current.value = "";
+                  }}
+                >
+                  Remove
+                </button>
+              </div>
+            ) : (
+              <>
+                <p className="dropzone-kicker">Optional deck or plan</p>
+                <p className="dropzone-copy">
+                  Drop a PDF or DOCX here, or attach one.
+                </p>
+                <button
+                  type="button"
+                  className="ghost"
+                  onClick={(event) => {
+                    event.stopPropagation();
+                    fileInputRef.current?.click();
+                  }}
+                >
+                  Attach a deck
+                </button>
+              </>
+            )}
+          </div>
+          {fileHint ? <p className="error">{fileHint}</p> : null}
         </form>
       </div>
       {error ? <p className="error">{error}</p> : null}
